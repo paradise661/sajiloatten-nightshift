@@ -1,0 +1,32 @@
+.action-btn {
+    padding: 8px 24px;
+}
+/* @media (max-width: 1326px) {
+    .break {
+        display: block;
+    }
+} */
+.ap-calendar-month {
+    background-image: url(../images/down.png) !important;
+    background-position: 10px 13px !important;
+    background-repeat: no-repeat !important;
+    padding: 10px 5px 10px 20px !important;
+    text-indent: 20px !important;
+    -webkit-transition: all 0.2s !important;
+    -moz-transition: all 2s !important;
+    transition: all 0.2s !important;
+}
+.ap-calendar-year {
+    background-image: url(../images/down.png) !important;
+    background-position: 10px 13px !important;
+    background-repeat: no-repeat !important;
+    padding: 10px 20px 10px 30px !important;
+    text-indent: 5px !important;
+    -webkit-transition: all 0.2s !important;
+    -moz-transition: all 2s !important;
+    transition: all 0.2s !important;
+}
+
+.login-btn {
+    background-color: #0a6b8e;
+}

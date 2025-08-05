@@ -1,0 +1,10 @@
+First Name,Last Name,Email,Phone,Gender,Designation,Date Of Birth,Join Date,Branch,Department
+Sita,Gurung,sita.gurung@example.com,9812345678,Female,Developer,3/15/1998,2/1/2021,Head Office,Software
+Ram,Shrestha,ram.s@example.com,9808765432,Male,Designer,5/30/1995,4/12/2022,Head Office,Design
+Anita,Tamang,anita.t@example.com,9823456789,Female,HR Manager,12/10/1989,1/3/2020,Head Office,Human Resources
+Kishor,Rai,krai@example.com,9809123456,Male,System Admin,7/22/1992,3/15/2021,Head Office,IT Support
+Nisha,Karki,nisha.k@example.com,9845123480,Female,Content Writer,11/2/1996,8/8/2023,Head Office,Content
+Bibek,Gurung,bibek.g@example.com,9812233445,Male,Marketing Lead,6/18/1991,5/1/2020,Head Office,Marketing
+Mina,Lama,mina.lama@example.com,9803456723,Female,QA Engineer,9/14/1993,10/10/2022,New Office,Quality Assurance
+Suman,Thapa,suman.t@example.com,9823344556,Male,Project Manager,1/5/1988,12/12/2019,Head Office,Management
+Puja,Bhattarai,puja.b@example.com,9809090909,Female,UI/UX Designer,2/25/1997,6/6/2024,New Office,Design
