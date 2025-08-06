@@ -23,6 +23,10 @@ if (!function_exists('calculateWorkedHours')) {
             $checkin = Carbon::parse($checkinTime);
             $checkout = Carbon::parse($checkoutTime);
 
+            if ($checkout->lessThan($checkin)) {
+                $checkout->addDay();
+            }
+
             $workedMinutes = $checkin->diffInMinutes($checkout);
 
             $workedHours = $workedMinutes / 60;

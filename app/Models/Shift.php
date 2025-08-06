@@ -9,6 +9,8 @@ class Shift extends Model
 {
     protected $fillable = [
         'name',
+        'day_end_time',
+        'is_cross_day',
         'start_time',
         'start_grace_time',
         'end_time',

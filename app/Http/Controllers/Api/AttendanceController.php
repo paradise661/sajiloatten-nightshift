@@ -35,24 +35,40 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $currentDate = now()->format('Y-m-d');
+            $user = $request->user();
+            $shift = $user->shift;
 
-            // Check if the user has already checked in today
-            $existingAttendance = Attendance::where('user_id', $request->user()->id)
-                ->where('date', $currentDate)
+            if (!$shift) {
+                return response()->json(['message' => 'Shift not assigned.'], 404);
+            }
+
+            $currentTime = now();
+            $currentDate = $currentTime->format('Y-m-d');
+            $shiftEndTime = $shift->day_end_time ?? '11:59:59';
+
+            $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
+            $nowTimestamp = strtotime($currentTime);
+
+            // Determine correct attendance day (for cross-day logic)
+            $attendanceDay = ($nowTimestamp >= $todayBoundaryTimestamp)
+                ? $currentDate
+                : Carbon::parse($currentDate)->subDay()->format('Y-m-d');
+
+            // Check if the user already checked in for this attendance day
+            $existingAttendance = Attendance::where('user_id', $user->id)
+                ->where('attendance_day', $attendanceDay)
                 ->first();
 
+            // location for specific condition
             $code = $this->getCode();
             if (!($code == 'paradise' && date('l') == 'Sunday')) {
-                $distance = getDistance($request->user()->branch->latitude, $request->user()->branch->longitude, $request->latitude, $request->longitude);
-                $area = $request->user()->branch->radius / 1000;
+                $distance = getDistance($user->branch->latitude, $user->branch->longitude, $request->latitude, $request->longitude);
+                $area = $user->branch->radius / 1000;
 
-                if ($request->user()->location_preference) {
-                    if ($distance > $area) {
-                        return response()->json([
-                            'message' => 'You are not in office area.',
-                        ], 400);
-                    }
+                if ($user->location_preference && $distance > $area) {
+                    return response()->json([
+                        'message' => 'You are not in the office area.',
+                    ], 400);
                 }
             }
 
@@ -62,10 +78,10 @@ class AttendanceController extends Controller
                 ], 400);
             }
 
-            //location preferences cases
-            $locationLog = null;
 
-            if ($request->user()->location_preference === 0) {
+            // Save location log
+            $locationLog = null;
+            if ($user->location_preference === 0) {
                 $locationLog = json_encode([
                     'checkin' => [
                         'latitude' => $request->latitude ?? '',
@@ -74,25 +90,26 @@ class AttendanceController extends Controller
                 ]);
             }
 
-            $attendance = Attendance::create([
-                'user_id' => $request->user()->id,
+            Attendance::create([
+                'user_id' => $user->id,
                 'date' => $currentDate,
+                'attendance_day' => $attendanceDay, // logical day for shift tracking
                 'type' => 'Present',
-                'checkin' => now()->format('H:i:s'),
+                'checkin' => $currentTime->format('H:i:s'),
                 'ip_address' => $request->ip(),
-                'latitude' => $request->latitude ?? NULL,
-                'longitude' => $request->longitude ?? NULL,
-                'device' => $request->device ?? 'Andriod',
+                'latitude' => $request->latitude ?? null,
+                'longitude' => $request->longitude ?? null,
+                'device' => $request->device ?? 'Android',
                 'attendance_by' => 'Self',
-                'late_checkin_reason' => $request->late_checkin_reason ?? NULL,
-                'location_log' => $locationLog
+                'late_checkin_reason' => $request->late_checkin_reason ?? null,
+                'location_log' => $locationLog,
             ]);
 
             return response()->json([
-                'message' => 'Your attendance has been successfully recorded. Thank you for checking in!.',
+                'message' => 'Your attendance has been successfully recorded. Thank you for checking in!',
             ]);
         } catch (Exception $e) {
-            Log::error('Attendance Save Error: ' . $e->getMessage());
+            Log::error('Attendance Check-In Error: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Something went wrong while recording your attendance. Please try again later.',
                 'error' => $e->getMessage(),
@@ -253,33 +270,49 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $currentDate = now()->format('Y-m-d');
+            $user = $request->user();
+            $shift = $user->shift;
 
-            $attendance = Attendance::where('user_id', $request->user()->id)->where('date', $currentDate)->first();
-
-            $code = $this->getCode();
-
-            if (!($code == 'paradise' && date('l') == 'Sunday')) {
-                $distance = getDistance($request->user()->branch->latitude, $request->user()->branch->longitude, $request->latitude, $request->longitude);
-                $area = $request->user()->branch->radius / 1000;
-
-
-                if ($request->user()->location_preference) {
-                    if ($distance > $area) {
-                        return response()->json([
-                            'message' => 'You are not in office area.',
-                        ], 400);
-                    }
-                }
+            if (!$shift) {
+                return response()->json(['message' => 'Shift not assigned.'], 404);
             }
 
-            if (!$attendance || !$attendance->checkin) {
+            $currentTime = now();
+            $currentDate = $currentTime->format('Y-m-d');
+
+            // Get the shift end boundary (e.g. 08:00)
+            $shiftEndTime = $shift->day_end_time ?? '11:59:59';
+
+            // Determine boundary timestamp (today's date + shift end time)
+            $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
+            $nowTimestamp = strtotime($currentTime);
+
+            // If current time is before shift end time, use previous day
+            $attendanceDay = ($nowTimestamp <= $todayBoundaryTimestamp)
+                ? Carbon::parse($currentDate)->subDay()->format('Y-m-d')
+                : $currentDate;
+
+            // Always fetch latest open check-in for that attendance day
+            $attendance = Attendance::where('user_id', $user->id)
+                ->where('attendance_day', $attendanceDay)
+                ->whereNotNull('checkin')
+                ->orderByDesc('id')
+                ->first();
+
+            if (!$attendance) {
                 return response()->json([
-                    'message' => 'No check-in record found for today.',
+                    'message' => 'No check-in record found for the applicable shift.',
                 ], 404);
             }
 
-            // Check if break_start is set but break_end is not
+            // Allow re-checkout within same shift window
+            if ($attendance->checkout && strtotime($attendance->checkout_date . ' ' . $attendance->checkout) >= $todayBoundaryTimestamp) {
+                return response()->json([
+                    'message' => 'You already checked out after the shift window.',
+                ], 400);
+            }
+
+            // Check for incomplete break
             if ($attendance->break_start && !$attendance->break_end) {
                 return response()->json([
                     'message' => 'You must end your break before checking out.',
@@ -290,17 +323,17 @@ class AttendanceController extends Controller
             $checkoutTime = now();
 
             $workedHours = calculateWorkedHours($checkinTime, $checkoutTime);
-            $overtime = calculateOvertimeAndShortMinutes($checkinTime, date('H:i:s'), $request->user()->shift, date('l'));
+            $overtime = calculateOvertimeAndShortMinutes($checkinTime, $checkoutTime->format('H:i:s'), $shift, date('l', strtotime($attendanceDay)));
 
             $locationLog = null;
-            if ($request->user()->location_preference === 0) {
+            if ($user->location_preference === 0) {
                 $existingLog = $attendance->location_log
                     ? json_decode($attendance->location_log, true)
-                    : null;
+                    : [];
 
                 $existingLog['checkout'] = [
-                    'latitude' => $request->latitude ?? '',
-                    'longitude' => $request->longitude ?? '',
+                    'latitude' => $request->latitude,
+                    'longitude' => $request->longitude,
                 ];
 
                 $locationLog = json_encode($existingLog, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -308,13 +341,15 @@ class AttendanceController extends Controller
 
             $attendance->update([
                 'checkout' => $checkoutTime->format('H:i:s'),
+                'checkout_date' => $checkoutTime->format('Y-m-d'),
                 'worked_hours' => $workedHours,
                 'latitude' => $request->latitude ?? $attendance->latitude,
                 'longitude' => $request->longitude ?? $attendance->longitude,
                 'overtime_minute' => $overtime['overtime_minutes'],
                 'short_minutes' => $overtime['short_minutes'],
-                'early_checkout_reason' => $request->early_checkout_reason ?? NULL,
-                'location_log' => $locationLog
+                'early_checkout_reason' => $request->early_checkout_reason ?? null,
+                'location_log' => $locationLog,
+                'is_cross_day' => $attendanceDay !== $checkoutTime->format('Y-m-d') ? 1 : 0,
             ]);
 
             return response()->json([

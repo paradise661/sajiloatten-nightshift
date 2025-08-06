@@ -38,11 +38,11 @@ class ShiftRequest extends FormRequest
         return $rules;
     }
 
-
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
             $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            $isCrossDay = $this->input('is_cross_day'); // Check if checkbox is checked
 
             foreach ($days as $day) {
                 if (!$this->has("{$day}_holiday")) {
@@ -53,7 +53,7 @@ class ShiftRequest extends FormRequest
                         $startTimestamp = strtotime($start);
                         $endTimestamp = strtotime($end);
 
-                        if ($endTimestamp <= $startTimestamp) {
+                        if (!$isCrossDay && $endTimestamp <= $startTimestamp) {
                             $validator->errors()->add("{$day}_end_time", ucfirst($day) . " End Time must be greater than Start Time.");
                         }
                     } else {

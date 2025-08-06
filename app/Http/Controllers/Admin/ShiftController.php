@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ShiftRequest;
-use App\Models\Department;
-use App\Models\DepartmentShift;
 use App\Models\Shift;
 use Illuminate\Http\Request;
 use Exception;
@@ -72,6 +70,8 @@ class ShiftController extends Controller
 
             Shift::create([
                 'name' => $request->name ?? NULL,
+                'day_end_time' => $request->day_end_time ?? '23:59:59',
+                'is_cross_day?1:0' => $request->is_cross_day ? 1 : 0,
                 'description' => json_encode($description) ?? NULL
             ]);
             return redirect()->route('shifts.index')->with('message', 'Shift Created Successfully');
@@ -103,7 +103,6 @@ class ShiftController extends Controller
     public function update(ShiftRequest $request, Shift $shift)
     {
         abort_unless(Gate::allows('edit shift'), 403);
-
         try {
             $days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
             $description = [];
@@ -136,6 +135,8 @@ class ShiftController extends Controller
 
             $shift->update([
                 'name' => $request->input('name'),
+                'day_end_time' => $request->day_end_time ?? '23:59:59',
+                'is_cross_day' => $request->is_cross_day ? 1 : 0,
                 'description' => json_encode($description),
             ]);
             return redirect()->route('shifts.index')->with('message', 'Update Successfully');

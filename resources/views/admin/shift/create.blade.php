@@ -25,6 +25,37 @@
                     </div>
 
                     <div class="col-span-12">
+                        <label class="inline-flex items-center gap-2">
+                            <input id="is_cross_day" type="checkbox" name="is_cross_day"
+                                {{ old('is_cross_day') ? 'checked' : '' }}>
+                            <span class="text-sm font-medium">Is Cross Day?</span>
+                        </label>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Check this box if the shift period extends into the next day. (e.g., night shift from 10 PM to 6
+                            AM next day).
+                        </p>
+                    </div>
+
+                    <div class="col-span-6 hidden" id="day_end_time_wrapper">
+                        <label class="form-label">Day End Time <span class="text-red-500">*</span></label>
+                        <div class="input-group relative">
+                            <div class="input-group-text text-[#8c9097] dark:text-white/50">
+                                <i class="ri-time-line"></i>
+                            </div>
+                            <input class="form-control timepicker @error('day_end_time') border-red-500 @enderror"
+                                id="day_end_time" type="text" name="day_end_time"
+                                value="{{ old('day_end_time', '23:59:59') }}" placeholder="Enter Day End Time"
+                                autocomplete="off">
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">
+                            Specify the end of the attendance day. For example, 23:59:59 means the day ends before midnight.
+                        </p>
+                        @error('day_end_time')
+                            <i class="text-red-500 text-xs mt-1">*{{ $message }}</i>
+                        @enderror
+                    </div>
+
+                    <div class="col-span-12">
                         <div class="overflow-x-auto">
                             <table
                                 class="min-w-full table-auto border border-gray-200 text-sm text-left bg-white rounded-lg shadow-sm">
@@ -190,6 +221,25 @@
                     flatpickrInstances[day + '_end_time'].setDate('18:00', true, "H:i");
                 });
             });
+
+            // Cross Day toggle
+            $('#is_cross_day').on('change', function() {
+                if ($(this).is(':checked')) {
+                    $('#day_end_time_wrapper').show();
+                } else {
+                    $('#day_end_time_wrapper').hide();
+                    $('#day_end_time').val('23:59:59');
+                }
+            }).trigger('change');
+
+            flatpickrInstances['day_end_time'] = flatpickr("#day_end_time", {
+                enableTime: true,
+                noCalendar: true,
+                dateFormat: "H:i:S",
+                time_24hr: true,
+                defaultDate: $('#day_end_time').val() || "23:59:59",
+            });
+
         });
     </script>
 @endsection

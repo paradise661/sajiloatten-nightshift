@@ -50,9 +50,7 @@ class DashboardController extends Controller
                 ->first();
 
             // if attendance is done in weekends
-            // $weekends = json_decode($request->user()->department->holidays ?? '') ?? [];
             $weekends = getWeekends($request->user());
-
             $weekendsDays = DateService::getWeekends($weekends);
 
             $weekendsAttendanceCount = Attendance::where('user_id', $request->user()->id)

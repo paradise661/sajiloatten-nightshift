@@ -58,7 +58,6 @@ class EmployeeController extends Controller
         abort_unless(Gate::allows('create employee'), 403);
 
         try {
-
             $designation = Designation::firstOrCreate(['name' => $request->designation]);
 
             $input = $request->except('roles');
