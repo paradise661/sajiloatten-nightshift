@@ -44,7 +44,8 @@ class AttendanceController extends Controller
 
             $currentTime = now();
             $currentDate = $currentTime->format('Y-m-d');
-            $shiftEndTime = $shift->day_end_time ?? '11:59:59';
+            $shiftEndTime = $shift->day_end_time ?? '23:59:59';
+
 
             $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
             $nowTimestamp = strtotime($currentTime);
@@ -53,6 +54,10 @@ class AttendanceController extends Controller
             $attendanceDay = ($nowTimestamp >= $todayBoundaryTimestamp)
                 ? $currentDate
                 : Carbon::parse($currentDate)->subDay()->format('Y-m-d');
+
+            if (!$shift->is_cross_day) {
+                $attendanceDay = $currentDate;
+            }
 
             // Check if the user already checked in for this attendance day
             $existingAttendance = Attendance::where('user_id', $user->id)
@@ -182,6 +187,7 @@ class AttendanceController extends Controller
         }
     }
 
+
     // Break End Method
     public function breakEnd(Request $request)
     {
@@ -280,8 +286,8 @@ class AttendanceController extends Controller
             $currentTime = now();
             $currentDate = $currentTime->format('Y-m-d');
 
-            // Get the shift end boundary (e.g. 08:00)
-            $shiftEndTime = $shift->day_end_time ?? '11:59:59';
+            // Get the shift end boundary (e.g. 11:59:59)
+            $shiftEndTime = $shift->day_end_time ?? '23:59:59';
 
             // Determine boundary timestamp (today's date + shift end time)
             $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
@@ -305,12 +311,12 @@ class AttendanceController extends Controller
                 ], 404);
             }
 
-            // Allow re-checkout within same shift window
-            if ($attendance->checkout && strtotime($attendance->checkout_date . ' ' . $attendance->checkout) >= $todayBoundaryTimestamp) {
-                return response()->json([
-                    'message' => 'You already checked out after the shift window.',
-                ], 400);
-            }
+            //Allow re-checkout within same shift window
+            // if ($attendance->checkout && strtotime($attendance->checkout_date . ' ' . $attendance->checkout) >= $todayBoundaryTimestamp) {
+            //     return response()->json([
+            //         'message' => 'You already checked out after the shift window.',
+            //     ], 400);
+            // }
 
             // Check for incomplete break
             if ($attendance->break_start && !$attendance->break_end) {
