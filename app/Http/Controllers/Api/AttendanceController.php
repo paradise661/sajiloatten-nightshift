@@ -42,10 +42,22 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Shift not assigned.'], 404);
             }
 
+            // location for specific condition
+            $code = $this->getCode();
+            if (!($code == 'paradise' && date('l') == 'Sunday')) {
+                $distance = getDistance($user->branch->latitude, $user->branch->longitude, $request->latitude, $request->longitude);
+                $area = $user->branch->radius / 1000;
+
+                if ($user->location_preference && $distance > $area) {
+                    return response()->json([
+                        'message' => 'You are not in the office area.',
+                    ], 400);
+                }
+            }
+
             $currentTime = now();
             $currentDate = $currentTime->format('Y-m-d');
             $shiftEndTime = $shift->day_end_time ?? '23:59:59';
-
 
             $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
             $nowTimestamp = strtotime($currentTime);
@@ -64,25 +76,11 @@ class AttendanceController extends Controller
                 ->where('attendance_day', $attendanceDay)
                 ->first();
 
-            // location for specific condition
-            $code = $this->getCode();
-            if (!($code == 'paradise' && date('l') == 'Sunday')) {
-                $distance = getDistance($user->branch->latitude, $user->branch->longitude, $request->latitude, $request->longitude);
-                $area = $user->branch->radius / 1000;
-
-                if ($user->location_preference && $distance > $area) {
-                    return response()->json([
-                        'message' => 'You are not in the office area.',
-                    ], 400);
-                }
-            }
-
             if ($existingAttendance) {
                 return response()->json([
                     'message' => 'You have already checked in today.',
                 ], 400);
             }
-
 
             // Save location log
             $locationLog = null;
@@ -138,41 +136,62 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $currentDate = now()->format('Y-m-d');
-            $userId = $request->user()->id;
+            $user = $request->user();
+            $shift = $user->shift;
 
-            $attendance = Attendance::where('user_id', $userId)
-                ->where('date', $currentDate)->first();
-
-            $distance = getDistance($request->user()->branch->latitude, $request->user()->branch->longitude, $request->latitude, $request->longitude);
-            $area = $request->user()->branch->radius / 1000;
-
-
-            if ($request->user()->location_preference) {
-                if ($distance > $area) {
-                    return response()->json([
-                        'message' => 'You are not in office area.',
-                    ], 400);
-                }
+            if (!$shift) {
+                return response()->json(['message' => 'Shift not assigned.'], 404);
             }
 
-            // Check if the attendance record exists and whether the user has checked in
+            // Check location
+            $distance = getDistance($user->branch->latitude, $user->branch->longitude, $request->latitude, $request->longitude);
+            $area = $user->branch->radius / 1000;
+
+            if ($user->location_preference && $distance > $area) {
+                return response()->json([
+                    'message' => 'You are not in office area.',
+                ], 400);
+            }
+
+            $currentTime = now();
+            $currentDate = $currentTime->format('Y-m-d');
+
+            // Get shift end time boundary
+            $shiftEndTime = $shift->day_end_time ?? '23:59:59';
+            $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
+            $nowTimestamp = strtotime($currentTime);
+
+            // Determine correct attendance_day (cross-day logic)
+            $attendanceDay = ($nowTimestamp >= $todayBoundaryTimestamp)
+                ? $currentDate
+                : Carbon::parse($currentDate)->subDay()->format('Y-m-d');
+
+            if (!$shift->is_cross_day) {
+                $attendanceDay = $currentDate;
+            }
+
+            // Find the attendance record for this shift period
+            $attendance = Attendance::where('user_id', $user->id)
+                ->where('attendance_day', $attendanceDay)
+                ->first();
+
             if (!$attendance || !$attendance->checkin) {
                 return response()->json([
                     'message' => 'You must check in first before starting your break.',
                 ], 400);
             }
 
-            // If the break start is already recorded, return a message
+            // Prevent multiple break starts
             if ($attendance->break_start) {
                 return response()->json([
-                    'message' => 'You have already started your break today.',
+                    'message' => 'You have already started your break.',
                 ], 400);
             }
 
-            // Set the break start time
-            $attendance->break_start = now()->format('H:i:s');
-            $attendance->save();
+            // Save break start
+            $attendance->update([
+                'break_start' => $currentTime->format('H:i:s')
+            ]);
 
             return response()->json([
                 'message' => 'Your break has been successfully started.',
@@ -192,7 +211,7 @@ class AttendanceController extends Controller
     public function breakEnd(Request $request)
     {
         try {
-            // Validate the request
+            // Validate request
             $validator = Validator::make($request->all(), [
                 'latitude' => 'required',
                 'longitude' => 'required',
@@ -205,23 +224,44 @@ class AttendanceController extends Controller
                 ], 422);
             }
 
-            $currentDate = now()->format('Y-m-d');
-            $userId = $request->user()->id;
+            $user = $request->user();
+            $shift = $user->shift;
 
-            $attendance = Attendance::where('user_id', $userId)
-                ->where('date', $currentDate)->first();
-
-            $distance = getDistance($request->user()->branch->latitude, $request->user()->branch->longitude, $request->latitude, $request->longitude);
-            $area = $request->user()->branch->radius / 1000;
-
-
-            if ($request->user()->location_preference) {
-                if ($distance > $area) {
-                    return response()->json([
-                        'message' => 'You are not in office area.',
-                    ], 400);
-                }
+            if (!$shift) {
+                return response()->json(['message' => 'Shift not assigned.'], 404);
             }
+
+            // Location check
+            $distance = getDistance($user->branch->latitude, $user->branch->longitude, $request->latitude, $request->longitude);
+            $area = $user->branch->radius / 1000;
+
+            if ($user->location_preference && $distance > $area) {
+                return response()->json([
+                    'message' => 'You are not in office area.',
+                ], 400);
+            }
+
+            $currentTime = now();
+            $currentDate = $currentTime->format('Y-m-d');
+
+            // Get shift end boundary
+            $shiftEndTime = $shift->day_end_time ?? '23:59:59';
+            $todayBoundaryTimestamp = strtotime($currentDate . ' ' . $shiftEndTime);
+            $nowTimestamp = strtotime($currentTime);
+
+            // Determine correct attendance day (cross-day logic)
+            $attendanceDay = ($nowTimestamp >= $todayBoundaryTimestamp)
+                ? $currentDate
+                : Carbon::parse($currentDate)->subDay()->format('Y-m-d');
+
+            if (!$shift->is_cross_day) {
+                $attendanceDay = $currentDate;
+            }
+
+            // Find attendance record for this shift period
+            $attendance = Attendance::where('user_id', $user->id)
+                ->where('attendance_day', $attendanceDay)
+                ->first();
 
             if (!$attendance || !$attendance->checkin) {
                 return response()->json([
@@ -235,17 +275,16 @@ class AttendanceController extends Controller
                 ], 400);
             }
 
-            // Calculate total break time in minutes
-            // $breakStart = Carbon::createFromFormat('H:i:s', $attendance->break_start);
-            $breakStart = Carbon::createFromFormat('g:i A', $attendance->break_start);
-
-            $breakEnd = now();
+            // Calculate break duration
+            $breakStart = Carbon::createFromFormat('H:i:s', $attendance->break_start);
+            $breakEnd = $currentTime;
             $totalBreakMinutes = $breakStart->diffInMinutes($breakEnd);
 
-            // Set the break end time and total break time
-            $attendance->break_end = $breakEnd->format('H:i:s');
-            $attendance->total_break = number_format($totalBreakMinutes, 2);
-            $attendance->save();
+            // Update attendance record
+            $attendance->update([
+                'break_end' => $breakEnd->format('H:i:s'),
+                'total_break' => number_format($totalBreakMinutes, 2)
+            ]);
 
             return response()->json([
                 'message' => 'Your break has been successfully ended.',
@@ -259,6 +298,7 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
 
     // Check-Out Method
     public function checkOut(Request $request)
@@ -283,10 +323,19 @@ class AttendanceController extends Controller
                 return response()->json(['message' => 'Shift not assigned.'], 404);
             }
 
+            // Location check
+            $distance = getDistance($user->branch->latitude, $user->branch->longitude, $request->latitude, $request->longitude);
+            $area = $user->branch->radius / 1000;
+
+            if ($user->location_preference && $distance > $area) {
+                return response()->json([
+                    'message' => 'You are not in office area.',
+                ], 400);
+            }
+
             $currentTime = now();
             $currentDate = $currentTime->format('Y-m-d');
 
-            // Get the shift end boundary (e.g. 11:59:59)
             $shiftEndTime = $shift->day_end_time ?? '23:59:59';
 
             // Determine boundary timestamp (today's date + shift end time)
@@ -297,6 +346,10 @@ class AttendanceController extends Controller
             $attendanceDay = ($nowTimestamp <= $todayBoundaryTimestamp)
                 ? Carbon::parse($currentDate)->subDay()->format('Y-m-d')
                 : $currentDate;
+
+            if (!$shift->is_cross_day) {
+                $attendanceDay = $currentDate;
+            }
 
             // Always fetch latest open check-in for that attendance day
             $attendance = Attendance::where('user_id', $user->id)
@@ -317,6 +370,17 @@ class AttendanceController extends Controller
             //         'message' => 'You already checked out after the shift window.',
             //     ], 400);
             // }
+
+
+            // Prevent checkout before check-in (same day or cross day)
+            $checkinDateTime = Carbon::parse(($attendance->attendance_day ?? $attendanceDay) . ' ' . $attendance->checkin);
+            $checkoutDateTime = now();
+
+            if ($checkoutDateTime->lt($checkinDateTime)) {
+                return response()->json([
+                    'message' => 'Invalid checkout: checkout time cannot be before check-in time.'
+                ], 400);
+            }
 
             // Check for incomplete break
             if ($attendance->break_start && !$attendance->break_end) {
