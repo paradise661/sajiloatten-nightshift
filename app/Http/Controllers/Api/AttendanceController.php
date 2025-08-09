@@ -276,7 +276,7 @@ class AttendanceController extends Controller
             }
 
             // Calculate break duration
-            $breakStart = Carbon::createFromFormat('H:i:s', $attendance->break_start);
+            $breakStart = Carbon::parse($attendance->break_start);
             $breakEnd = $currentTime;
             $totalBreakMinutes = $breakStart->diffInMinutes($breakEnd);
 
@@ -298,7 +298,6 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
-
 
     // Check-Out Method
     public function checkOut(Request $request)
